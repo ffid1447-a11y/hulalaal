@@ -2,38 +2,44 @@ from flask import Flask, request, jsonify
 import requests
 import threading
 import time
+import os
 
 app = Flask(__name__)
 
-# CONFIGURATION
+# CONFIGURATION - Use environment variables for security
 OFFICIAL_API_HOST = "https://westeros.famapp.in"
-AUTH_TOKEN = "eyJlbmMiOiJBMjU2Q0JDLUhTNTEyIiwiZXBrIjp7Imt0eSI6Ik9LUCIsImNydiI6Ilg0NDgiLCJ4IjoiQ05iRHkxQmxBUUVpOVlPYmItdlM2TklxUldiNkJ1VFd3d1pZNkx2MlM2QlI2UWM0c2h2dzh4X2tLcVZwWnFheFNkbWpXZ0Jrd3JZIn0sImFsZyI6IkVDREgtRVMifQ..azn1X3QVPLXmYtS5WnTF5g.WK4YgAn8pxf7aMDLN-tUVoID5EabXAyTEfhIQ_GG7znJ3_ezx5u_c2tBFzeaIFs5bWxB0epa0ucwuYiIeseBpyppkGwNQthyyeh7OLEwj67gCVEEz0wYGOpGAMxs6hijNNR34scAAtB2SIgLONbqGoPIWAgxfaxuNsPbmtTLMIkPjbgXqK-Rr9Ju6aFZ7lMDLz2MOMF5BfH_PkH2pMu9YH-oxS3aqSQEYmz2rX1Z6SybjdVojvB7zBqrpuSQkiykPjNRpNMszlRLqsrPax-BG5b5yryuX_SVN730Z1s4uWSUOHJW0wACX7St1tSxbx2z5E3sLo9DwYOg9MKIq3sQwzfKmsKBcIg2n_IYhROXHM1P6z_yoSuIx1GBNafgndHw.n0jZJ9yQDCu_rdsg36eOgj-UoS3nWDLpsU0KbMU-6TE"
-DEVICE_ID = "adb84e9925c4f17a"
-USER_AGENT = "2312DRAABI | Android 15 | Dalvik/2.1.0 | gold | 2EF4F924D8CD3764269BD3548C4E7BF4FA070E7B | 3.11.5 (Build 525) | U78TN5J23U"
+AUTH_TOKEN = os.environ.get("AUTH_TOKEN", "eyJlbmMiOiJBMjU2Q0JDLUhTNTEyIiwiZXBrIjp7Imt0eSI6Ik9LUCIsImNydiI6Ilg0NDgiLCJ4IjoiQ05iRHkxQmxBUUVpOVlPYmItdlM2TklxUldiNkJ1VFd3d1pZNkx2MlM2QlI2UWM0c2h2dzh4X2tLcVZwWnFheFNkbWpXZ0Jrd3JZIn0sImFsZyI6IkVDREgtRVMifQ..azn1X3QVPLXmYtS5WnTF5g.WK4YgAn8pxf7aMDLN-tUVoID5EabXAyTEfhIQ_GG7znJ3_ezx5u_c2tBFzeaIFs5bWxB0epa0ucwuYiIeseBpyppkGwNQthyyeh7OLEwj67gCVEEz0wYGOpGAMxs6hijNNR34scAAtB2SIgLONbqGoPIWAgxfaxuNsPbmtTLMIkPjbgXqK-Rr9Ju6aFZ7lMDLz2MOMF5BfH_PkH2pMu9YH-oxS3aqSQEYmz2rX1Z6SybjdVojvB7zBqrpuSQkiykPjNRpNMszlRLqsrPax-BG5b5yryuX_SVN730Z1s4uWSUOHJW0wACX7St1tSxbx2z5E3sLo9DwYOg9MKIq3sQwzfKmsKBcIg2n_IYhROXHM1P6z_yoSuIx1GBNafgndHw.n0jZJ9yQDCu_rdsg36eOgj-UoS3nWDLpsU0KbMU-6TE")
+DEVICE_ID = os.environ.get("DEVICE_ID", "adb84e9925c4f17a")
+USER_AGENT = os.environ.get("USER_AGENT", "2312DRAABI | Android 15 | Dalvik/2.1.0 | gold | 2EF4F924D8CD3764269BD3548C4E7BF4FA070E7B | 3.11.5 (Build 525) | U78TN5J23U")
 
-# Session for faster requests
-SESSION = requests.Session()
-SESSION.headers.update({
-    "host": "westeros.famapp.in",
-    "user-agent": USER_AGENT,
-    "x-device-details": USER_AGENT,
-    "x-app-version": "525",
-    "x-platform": "1",
-    "device-id": DEVICE_ID,
-    "authorization": f"Token {AUTH_TOKEN}",
-    "accept-encoding": "gzip",
-    "content-type": "application/json; charset=UTF-8"
-})
-
-# Cache for mapping
+# Initialize session
+SESSION = None
 FAM_ID_MAPPING = {}
+
+def init_session():
+    """Initialize session with headers"""
+    global SESSION
+    if SESSION is None:
+        SESSION = requests.Session()
+        SESSION.headers.update({
+            "host": "westeros.famapp.in",
+            "user-agent": USER_AGENT,
+            "x-device-details": USER_AGENT,
+            "x-app-version": "525",
+            "x-platform": "1",
+            "device-id": DEVICE_ID,
+            "authorization": f"Token {AUTH_TOKEN}",
+            "accept-encoding": "gzip",
+            "content-type": "application/json; charset=UTF-8"
+        })
 
 def fetch_blocked_list():
     """Fetch blocked list"""
+    init_session()
     try:
         response = SESSION.get(
             f"{OFFICIAL_API_HOST}/user/blocked_list/",
-            timeout=5
+            timeout=10
         )
         if response.status_code == 200:
             return response.json()
@@ -83,12 +89,13 @@ def instant_unblock(fam_id):
         try:
             # Small delay to ensure API got the block
             time.sleep(0.5)
+            init_session()
             
             unblock_payload = {"block": False, "vpa": fam_id}
             response = SESSION.post(
                 f"{OFFICIAL_API_HOST}/user/vpa/block/",
                 json=unblock_payload,
-                timeout=3
+                timeout=5
             )
             
             if response.status_code == 200:
@@ -107,7 +114,8 @@ def home():
     return jsonify({
         "message": "Fam ID to Number API",
         "endpoint": "/get-number?id=username@fam",
-        "status": "active"
+        "status": "active",
+        "version": "1.0"
     })
 
 @app.route('/get-number', methods=['GET'])
@@ -148,10 +156,11 @@ def get_number():
     block_payload = {"block": True, "vpa": fam_id}
     
     try:
+        init_session()
         block_response = SESSION.post(
             f"{OFFICIAL_API_HOST}/user/vpa/block/",
             json=block_payload,
-            timeout=5
+            timeout=10
         )
         
         if block_response.status_code != 200:
@@ -217,6 +226,14 @@ def blocked_list():
     return jsonify({
         "count": len(users),
         "users": users
+    })
+
+@app.route('/health', methods=['GET'])
+def health():
+    """Health check endpoint"""
+    return jsonify({
+        "status": "healthy",
+        "timestamp": time.time()
     })
 
 # Vercel requires this
